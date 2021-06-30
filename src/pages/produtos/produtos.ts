@@ -14,6 +14,7 @@ export class ProdutosPage {
 
   items: ProdutoDTO[] = [];
   loading: Loading = null;
+  page: number = 0;
 
   constructor(
     public navCtrl: NavController,
@@ -29,19 +30,21 @@ export class ProdutosPage {
   loadData() {
     let categoria_id = this.navParams.get('id');
     this.presentLoading();
-    this.produtoService.findByCategoria(categoria_id)
+    this.produtoService.findByCategoria(categoria_id, this.page, 10)
       .subscribe(response => {
-        this.items = response['content'];
+        this.items = this.items.concat(response['content']);
+        console.log(this.page)
+        console.log(this.items)
+        this.loadImageUrls(response['content']);
         this.loading.dismiss();
-        this.loadImageUrls();
       },
         error => {
           this.loading.dismiss();
         });
   }
 
-  loadImageUrls() {
-    this.items.forEach(produto => {
+  loadImageUrls(items) {
+    items.forEach(produto => {
       this.produtoService.getSmallImageFromBucket(produto.id)
         .subscribe(response => {
           produto.imageUrl = `${API_CONFIG.bucketBaseUrl}/prod${produto.id}-small.jpg`
@@ -62,6 +65,16 @@ export class ProdutosPage {
   }
 
   doRefresh(event) {
+    this.page = 0;
+    this.items = [];
+    this.loadData();
+    setTimeout(() => {
+      event.complete();
+    }, 1000);
+  }
+
+  doInfinite(event) {
+    this.page++;
     this.loadData();
     setTimeout(() => {
       event.complete();
