@@ -1,5 +1,7 @@
 import { Component } from '@angular/core';
-import { IonicPage, NavController, NavParams } from 'ionic-angular';
+import { DomSanitizer } from '@angular/platform-browser';
+import { Camera, CameraOptions } from '@ionic-native/camera';
+import { IonicPage, NavController } from 'ionic-angular';
 import { API_CONFIG } from '../../config/api.config';
 import { ClienteDTO } from '../../models/cliente.dto';
 import { ClienteService } from '../../services/domain/cliente.service';
@@ -13,16 +15,25 @@ import { StorageService } from '../../services/storage.service';
 export class ProfilePage {
 
   cliente: ClienteDTO;
+  picture: string;
+  cameraOn: boolean = false;
+  profileImage;
 
   constructor(
     public navCtrl: NavController,
-    public navParams: NavParams,
     public storage: StorageService,
-    public clienteService: ClienteService
+    public clienteService: ClienteService,
+    public camera: Camera,
+    public sanitizer: DomSanitizer
   ) {
+    this.profileImage = 'assets/imgs/avatar-blank.png'
   }
 
   ionViewDidLoad() {
+    this.loadData();
+  }
+
+  loadData() {
     let localUser = this.storage.getLocalUser();
     if (localUser && localUser.email) {
       this.clienteService.findByEmail(localUser.email)
@@ -43,9 +54,52 @@ export class ProfilePage {
   getImageIfExists() {
     this.clienteService.getImageFromBucket(this.cliente.id)
       .subscribe(response => {
-        this.cliente.imageUrl = `${API_CONFIG.bucketBaseUrl}/cp${this.cliente.id}.jpg`
+        this.cliente.imageUrl = `${API_CONFIG.bucketBaseUrl}/cp${this.cliente.id}.jpg`;
+        this.blobToDataURL(response).then(dataUrl => {
+          let str: string = dataUrl as string;
+          this.profileImage = this.sanitizer.bypassSecurityTrustUrl(str);
+        })
       },
-        error => { })
+        error => {
+          this.profileImage = 'assets/imgs/avatar-blank.png'
+        })
   }
 
+  blobToDataURL(blob) {
+    return new Promise((fulfill, reject) => {
+      let reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = (e) => fulfill(reader.result);
+      reader.readAsDataURL(blob);
+    })
+  }
+
+  getCameraPicture() {
+    this.cameraOn = true;
+
+    const options: CameraOptions = {
+      quality: 100,
+      destinationType: this.camera.DestinationType.FILE_URI,
+      encodingType: this.camera.EncodingType.PNG,
+      mediaType: this.camera.MediaType.PICTURE
+    }
+
+    this.camera.getPicture(options).then((imageData) => {
+      this.picture = 'data:image/png;base64,' + imageData;
+      this.cameraOn = false;
+    }, (err) => {
+      this.cameraOn = false;
+    });
+  }
+
+  sendPicture() {
+    this.clienteService.uploadPicture(this.picture).subscribe(response => {
+      this.picture = null;
+      this.getImageIfExists();
+    }, error => { });
+  }
+
+  cancel() {
+    this.picture = null;
+  }
 }
